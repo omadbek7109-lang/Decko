@@ -42,6 +42,7 @@ export const gameStore = createStore<GameStoreState>({
 
 let botTimer: ReturnType<typeof setTimeout> | null = null;
 let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
+let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function clearBotTimer(): void {
   if (botTimer !== null) clearTimeout(botTimer);
@@ -86,6 +87,8 @@ function runHuman(action: (round: RoundState, playerId: string) => RoundState): 
     commit(action(match.round, humanId));
   } catch (err) {
     gameStore.set({ notice: err instanceof GameError ? noticeFor(err) : 'Xatolik yuz berdi' });
+    if (noticeTimer !== null) clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => gameStore.set({ notice: null }), 1800);
   }
 }
 
@@ -94,7 +97,7 @@ function noticeFor(err: GameError): string {
     case 'NOT_YOUR_TURN':
       return 'Hozir sizning navbatingiz emas';
     case 'ILLEGAL_CARD':
-      return 'Bu kartani hozir tashlab bo‘lmaydi';
+      return 'Noto‘g‘ri karta';
     case 'ALREADY_DREW':
       return 'Bu navbatda karta olgansiz';
     case 'CANNOT_PASS':

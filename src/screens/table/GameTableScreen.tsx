@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { type CardId, canDraw, canPass, cardPoints, currentPlayer, legalCards, topCard } from '../../engine';
+import { useEffect, useState } from 'react';
+import { canDraw, canPass, cardPoints, currentPlayer, topCard } from '../../engine';
 import { eventText, t } from '../../i18n/uz';
 import { ROUTES, navigate } from '../../lib/router';
 import { useStore } from '../../lib/store';
@@ -31,7 +31,6 @@ export function GameTableScreen() {
   }, [match]);
 
   const round = match?.round ?? null;
-  const playable = useMemo(() => new Set<CardId>(round && humanId ? legalCards(round, humanId).map((c) => c.id) : []), [round, humanId]);
 
   if (!match || !round || !humanId) return null;
 
@@ -60,9 +59,8 @@ export function GameTableScreen() {
   if (!live) status = t.game.roundOver;
   else if (!myTurn) status = t.game.waiting(turnPlayer.name);
   else if (round.phase === 'choosingSuit') status = t.game.chooseSuit;
-  else if (round.mustCover && playable.size === 0) status = t.game.cover;
-  else if (round.requiredSuit) status = t.game.mustFollow(round.requiredSuit);
-  else status = t.game.follow(top.suit, top.rank);
+  else if (round.mustCover) status = t.game.coverSix;
+  else status = t.game.yourTurn;
 
   const showPass = myTurn && canPass(round, humanId);
   const drawEnabled = myTurn && canDraw(round, humanId);
@@ -140,7 +138,6 @@ export function GameTableScreen() {
         {me && (
           <Hand
             cards={me.hand}
-            playable={playable}
             myTurn={myTurn && round.phase === 'playing'}
             width={width - 16}
             height={handHeight}
