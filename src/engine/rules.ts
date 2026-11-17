@@ -10,13 +10,18 @@ export interface CardEffect {
   nextDraws?: number;
   /** Next player loses their turn. */
   skipNext?: boolean;
+  /**
+   * The draw penalty can be passed on: the targeted player may answer with a
+   * card of the same rank, adding to the penalty for the following player.
+   */
+  stackable?: boolean;
   /** Turn order changes direction. */
   reverse?: boolean;
   /** Can be played on any card. */
   wild?: boolean;
   /** Player who plays it names the suit the next player must follow. */
   chooseSuit?: boolean;
-  /** Player who plays it must cover it with another card (drawing until they can). */
+  /** Player who plays it must play again (drawing until they can). */
   mustCover?: boolean;
 }
 
@@ -31,14 +36,18 @@ export interface RuleSet {
   drawPerTurn: number;
   /** After drawing, the player may still play a matching card this turn. */
   mayPlayAfterDraw: boolean;
+  /** After drawing, the turn passes automatically when nothing in hand can be played. */
+  autoPassAfterDraw: boolean;
   /** Effects by rank (applies to every suit of that rank). */
   rankEffects: Partial<Record<Rank, CardEffect>>;
   /** Effects for one exact card; these replace the rank effect for that card. */
   cardEffects: Partial<Record<CardId, CardEffect>>;
   /** Apply the effect of the first upturned card at the start of a round. */
   applyEffectsOnStartCard: boolean;
-  /** Apply draw/skip effects of the card a player finishes with. */
+  /** Apply draw effects of the card a player finishes with. */
   applyEffectsOnFinishingCard: boolean;
+  /** A round cannot be finished with a card that must be covered. */
+  mustCoverBlocksFinish: boolean;
   /** Penalty points for cards left in hand when a round ends. */
   cardPoints: Record<Rank, number>;
   cardPointOverrides: Partial<Record<CardId, number>>;
@@ -47,8 +56,8 @@ export interface RuleSet {
   finishBonusByCard: Partial<Record<CardId, number>>;
   /** A player whose total goes ABOVE this is eliminated. */
   eliminationScore: number;
-  /** If a total lands exactly on this value it resets to 0 (null = no reset). */
-  resetScoreAt: number | null;
+  /** Exact totals that are replaced, e.g. { 100: 50, 101: 0 }. */
+  scoreResets: Record<number, number>;
   /**
    * Rule details that are configurable but not yet confirmed by the product
    * owner. Shown in docs/RULES.md and the in-app rules screen.
@@ -68,10 +77,7 @@ const DEFAULT_POINTS: Record<Rank, number> = {
   A: 11,
 };
 
-/**
- * Plain Mau-Mau: match suit or rank, no special cards.
- * The only certain, variant-free rule set.
- */
+/** Plain Mau-Mau: match suit or rank, no special cards. */
 export const BASIC_RULES: RuleSet = {
   id: 'basic',
   name: 'Oddiy',
@@ -79,34 +85,40 @@ export const BASIC_RULES: RuleSet = {
   handSize: 5,
   drawPerTurn: 1,
   mayPlayAfterDraw: true,
+  autoPassAfterDraw: true,
   rankEffects: {},
   cardEffects: {},
   applyEffectsOnStartCard: false,
   applyEffectsOnFinishingCard: false,
+  mustCoverBlocksFinish: false,
   cardPoints: DEFAULT_POINTS,
   cardPointOverrides: {},
   finishBonusByRank: {},
   finishBonusByCard: {},
   eliminationScore: 101,
-  resetScoreAt: null,
-  unconfirmed: ['Karta ochkolari (6–10 o‘z qiymati, 9 = 0, V = 2, D = 3, K = 4, T = 11)'],
+  scoreResets: { 100: 50, 101: 0 },
+  unconfirmed: [],
 };
 
 /**
- * The common "101" variant. Every special effect below is configurable and
- * listed in `unconfirmed` until the product owner approves the exact rules.
+ * Classic "101" (Сто одно) as played in the popular CIS apps:
+ * 6 → +1 and skip, 7 → +2 and skip (both can be passed on with the same rank),
+ * 8 → play again, 10 → reverse, A → skip, Q → any card + name a suit,
+ * K♠ → +4 and skip. 100 → 50, exactly 101 → 0, above 101 → out.
  */
 export const CLASSIC_101_RULES: RuleSet = {
   id: 'classic101',
   name: 'Klassik 101',
-  description: 'Maxsus kartalar bilan. Ochkosi 101 dan oshgan o‘yinchi chiqib ketadi.',
+  description: '6, 7, 8, 10, tuz, dama va qarg‘a qirol maxsus. Ochkosi 101 dan oshgan o‘yinchi chiqadi.',
   handSize: 5,
   drawPerTurn: 1,
   mayPlayAfterDraw: true,
+  autoPassAfterDraw: true,
   rankEffects: {
-    '6': { mustCover: true },
-    '7': { nextDraws: 2, skipNext: true },
-    '8': { reverse: true },
+    '6': { nextDraws: 1, skipNext: true, stackable: true },
+    '7': { nextDraws: 2, skipNext: true, stackable: true },
+    '8': { mustCover: true },
+    '10': { reverse: true },
     A: { skipNext: true },
     Q: { wild: true, chooseSuit: true },
   },
@@ -115,22 +127,18 @@ export const CLASSIC_101_RULES: RuleSet = {
   },
   applyEffectsOnStartCard: false,
   applyEffectsOnFinishingCard: true,
+  mustCoverBlocksFinish: true,
   cardPoints: DEFAULT_POINTS,
   cardPointOverrides: {},
   finishBonusByRank: { Q: -20 },
   finishBonusByCard: { 'Q-spades': -40 },
   eliminationScore: 101,
-  resetScoreAt: null,
+  scoreResets: { 100: 50, 101: 0 },
   unconfirmed: [
-    '6 — tashlagan o‘yinchi uni yana bir karta bilan yopishi kerak',
-    '7 — keyingi o‘yinchi 2 ta oladi va yurishni o‘tkazib yuboradi',
-    '8 — yurish yo‘nalishi o‘zgaradi',
-    'Tuz (A) — keyingi o‘yinchi yurishni o‘tkazib yuboradi',
-    'Dama (Q) — istalgan kartaga tashlanadi, mast tanlanadi',
-    'Qirol qarg‘a (K♠) — keyingi o‘yinchi 4 ta oladi va o‘tkazib yuboradi',
-    'Dama bilan tugatish: −20 ochko, qarg‘a dama bilan: −40',
-    'Aynan 100 ga tushsa nolga qaytadimi — hozircha yo‘q',
-    'Karta ochkolari (6–10 o‘z qiymati, 9 = 0, V = 2, D = 3, K = 4, T = 11)',
+    'Qo‘lga 5 ta karta tarqatiladi (ba’zi ilovalarda 4)',
+    'Dama istalgan kartaga tashlanadi (ba’zi variantlarda faqat mast bo‘yicha)',
+    '8 bilan raundni tugatib bo‘lmaydi — uni yopish kerak',
+    'Qarg‘a qirol: +4 (ba’zi variantlarda +5)',
   ],
 };
 

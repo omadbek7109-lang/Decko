@@ -1,4 +1,4 @@
-import type { Card, CardId, Suit } from './cards';
+import type { Card, CardId, Rank, Suit } from './cards';
 import { createDeck, deal, shuffle } from './deck';
 import { createRng } from './random';
 import { type CardEffect, type RuleSet, effectFor } from './rules';
@@ -15,6 +15,13 @@ export interface RoundPlayer extends SeatInput {
 
 export type RoundPhase = 'playing' | 'choosingSuit' | 'roundOver';
 
+/** A draw penalty waiting for the current player (from stackable 6s / 7s). */
+export interface PendingPenalty {
+  draws: number;
+  rank: Rank;
+  skip: boolean;
+}
+
 export type GameEvent =
   | { type: 'play'; playerId: string; card: Card }
   | { type: 'draw'; playerId: string; count: number; forced: boolean }
@@ -22,6 +29,7 @@ export type GameEvent =
   | { type: 'reverse'; direction: 1 | -1 }
   | { type: 'suitChosen'; playerId: string; suit: Suit }
   | { type: 'mustCover'; playerId: string }
+  | { type: 'passOn'; playerId: string; draws: number }
   | { type: 'pass'; playerId: string }
   | { type: 'reshuffle'; count: number }
   | { type: 'roundOver'; winnerId: string };
@@ -39,8 +47,10 @@ export interface RoundState {
   readonly requiredSuit: Suit | null;
   /** Current player has already drawn this turn. */
   readonly hasDrawn: boolean;
-  /** Current player must cover the card they just played. */
+  /** Current player must play again on the card they just played (e.g. an 8). */
   readonly mustCover: boolean;
+  /** Draw penalty aimed at the current player; they pass it on or take it. */
+  readonly pending: PendingPenalty | null;
   readonly phase: RoundPhase;
   readonly winnerId: string | null;
   readonly reshuffles: number;
@@ -98,6 +108,7 @@ export function createRound({ seats, rules, seed, startIndex = 0 }: CreateRoundO
     requiredSuit: null,
     hasDrawn: false,
     mustCover: false,
+    pending: null,
     phase: 'playing',
     winnerId: null,
     reshuffles: 0,
@@ -148,8 +159,11 @@ export function activeSuit(state: RoundState): Suit {
 export function matches(state: RoundState, card: Card): boolean {
   const top = topCard(state);
   const effect = effectFor(state.rules, card);
+  if (state.pending) {
+    // A pending penalty can only be passed on with a card of the same rank.
+    return card.rank === state.pending.rank && Boolean(effect.stackable);
+  }
   if (state.mustCover) {
-    // Covering: same suit or same rank as the card just played (or a wild).
     return card.suit === top.suit || card.rank === top.rank || Boolean(effect.wild);
   }
   if (effect.wild) return true;
@@ -172,12 +186,15 @@ export function availableToDraw(state: RoundState): number {
 
 export function canDraw(state: RoundState, playerId: string): boolean {
   if (state.phase !== 'playing' || currentPlayer(state).id !== playerId) return false;
+  // Taking a pending penalty is always allowed, even if the deck is short.
+  if (state.pending) return true;
   if (availableToDraw(state) === 0) return false;
   return state.mustCover || !state.hasDrawn;
 }
 
 export function canPass(state: RoundState, playerId: string): boolean {
   if (state.phase !== 'playing' || currentPlayer(state).id !== playerId) return false;
+  if (state.pending) return false;
   if (state.mustCover) return availableToDraw(state) === 0 && legalCards(state).length === 0;
   if (state.hasDrawn) return true;
   // Nothing to draw and nothing to play: the player may pass.
@@ -221,7 +238,7 @@ function drawInto(state: RoundState, index: number, count: number, forced: boole
   return replaceHand(s, index, hand);
 }
 
-/** Ends the current turn, applying draw/skip effects to the following player(s). */
+/** Ends the current turn, applying immediate draw/skip effects to the following player(s). */
 function advance(state: RoundState, effect: CardEffect, events: GameEvent[]): RoundState {
   let s: RoundState = { ...state, hasDrawn: false, mustCover: false, turn: state.turn + 1 };
   let next = nextIndex(s, s.currentIndex);
@@ -233,9 +250,14 @@ function advance(state: RoundState, effect: CardEffect, events: GameEvent[]): Ro
   return { ...s, currentIndex: next };
 }
 
+/** Ends the turn and hands a pending penalty to the next player without resolving it. */
+function passPenaltyOn(state: RoundState): RoundState {
+  return { ...state, hasDrawn: false, mustCover: false, turn: state.turn + 1, currentIndex: nextIndex(state, state.currentIndex) };
+}
+
 function finishRound(state: RoundState, winnerId: string, events: GameEvent[]): RoundState {
   events.push({ type: 'roundOver', winnerId });
-  return { ...state, phase: 'roundOver', winnerId, hasDrawn: false, mustCover: false, events };
+  return { ...state, phase: 'roundOver', winnerId, hasDrawn: false, mustCover: false, pending: null, events };
 }
 
 export function playCard(state: RoundState, playerId: string, cardId: CardId): RoundState {
@@ -248,13 +270,22 @@ export function playCard(state: RoundState, playerId: string, cardId: CardId): R
 
   const events: GameEvent[] = [{ type: 'play', playerId, card }];
   const effect = effectFor(state.rules, card);
-  let s: RoundState = replaceHand(state, index, player.hand.filter((c) => c.id !== cardId));
-  s = { ...s, discardPile: [...s.discardPile, card], requiredSuit: null, mustCover: false };
+  const handAfter = player.hand.filter((c) => c.id !== cardId);
+  let s: RoundState = replaceHand(state, index, handAfter);
+  s = { ...s, discardPile: [...s.discardPile, card], requiredSuit: null, mustCover: false, hasDrawn: false };
 
-  if ((s.players[index] as RoundPlayer).hand.length === 0) {
-    if (state.rules.applyEffectsOnFinishingCard && (effect.nextDraws || effect.skipNext)) {
-      const next = nextIndex(s, index);
-      if (effect.nextDraws) s = drawInto(s, next, effect.nextDraws, true, events);
+  // Stackable penalties accumulate and travel to the next player.
+  let pending: PendingPenalty | null = null;
+  if (effect.nextDraws && effect.stackable) {
+    pending = { draws: (state.pending?.draws ?? 0) + effect.nextDraws, rank: card.rank, skip: Boolean(effect.skipNext) };
+  }
+  s = { ...s, pending: null };
+
+  const blocksFinish = Boolean(effect.mustCover) && state.rules.mustCoverBlocksFinish;
+  if (handAfter.length === 0 && !blocksFinish) {
+    if (state.rules.applyEffectsOnFinishingCard) {
+      const draws = pending ? pending.draws : (effect.nextDraws ?? 0);
+      if (draws > 0) s = drawInto(s, nextIndex(s, index), draws, true, events);
     }
     return finishRound(s, playerId, events);
   }
@@ -265,10 +296,15 @@ export function playCard(state: RoundState, playerId: string, cardId: CardId): R
   }
   if (effect.mustCover) {
     events.push({ type: 'mustCover', playerId });
-    return { ...s, mustCover: true, hasDrawn: false, events };
+    return { ...s, mustCover: true, events };
   }
   if (effect.chooseSuit) {
     return { ...s, phase: 'choosingSuit', events };
+  }
+  if (pending) {
+    const next = passPenaltyOn(s);
+    events.push({ type: 'passOn', playerId: currentPlayer(next).id, draws: pending.draws });
+    return { ...next, pending, events };
   }
   return { ...advance(s, effect, events), events };
 }
@@ -281,16 +317,34 @@ export function chooseSuit(state: RoundState, playerId: string, suit: Suit): Rou
   return { ...advance(s, { nextDraws: effect.nextDraws, skipNext: effect.skipNext }, events), events };
 }
 
+/**
+ * Draws a card. With a pending penalty this means "take it": the player draws
+ * the whole penalty and (usually) loses the turn.
+ */
 export function drawCard(state: RoundState, playerId: string): RoundState {
   assertTurn(state, playerId, 'playing');
-  if (!state.mustCover && state.hasDrawn) throw new GameError('ALREADY_DREW', 'You already drew this turn');
   const events: GameEvent[] = [];
+
+  if (state.pending) {
+    const { draws, skip } = state.pending;
+    let s = drawInto({ ...state, pending: null }, state.currentIndex, draws, true, events);
+    if (skip) {
+      events.push({ type: 'skip', playerId });
+      s = { ...s, hasDrawn: false, mustCover: false, turn: s.turn + 1, currentIndex: nextIndex(s, s.currentIndex) };
+    }
+    return { ...s, events };
+  }
+
+  if (!state.mustCover && state.hasDrawn) throw new GameError('ALREADY_DREW', 'You already drew this turn');
   const count = state.mustCover ? 1 : state.rules.drawPerTurn;
   let s = drawInto(state, state.currentIndex, count, false, events);
   s = { ...s, hasDrawn: true };
-  if (!state.mustCover && !state.rules.mayPlayAfterDraw) {
-    events.push({ type: 'pass', playerId });
-    s = advance(s, {}, events);
+  if (!state.mustCover) {
+    const nothingToPlay = !state.rules.mayPlayAfterDraw || (state.rules.autoPassAfterDraw && legalCards(s).length === 0);
+    if (nothingToPlay) {
+      events.push({ type: 'pass', playerId });
+      s = advance(s, {}, events);
+    }
   }
   return { ...s, events };
 }
@@ -299,5 +353,7 @@ export function passTurn(state: RoundState, playerId: string): RoundState {
   assertTurn(state, playerId, 'playing');
   if (!canPass(state, playerId)) throw new GameError('CANNOT_PASS', 'Draw a card before passing');
   const events: GameEvent[] = [{ type: 'pass', playerId }];
+  // Edge case: a player stuck with an uncoverable last card and an empty deck has no cards left.
+  if (currentPlayer(state).hand.length === 0) return finishRound(state, playerId, events);
   return { ...advance(state, {}, events), events };
 }

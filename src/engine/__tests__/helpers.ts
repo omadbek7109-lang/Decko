@@ -36,6 +36,7 @@ export function table(opts: {
     requiredSuit: opts.requiredSuit ?? null,
     hasDrawn: false,
     mustCover: false,
+    pending: null,
     phase: 'playing',
     winnerId: null,
     reshuffles: 0,

@@ -139,7 +139,10 @@ function RuleSetSection({ rules }: { rules: RuleSet }) {
           ))}
         </div>
         <p className="text-[13px] text-muted">
-          Ochkosi {rules.eliminationScore} dan oshgan o‘yinchi chiqadi.
+          Ochkosi {rules.eliminationScore} dan oshgan o‘yinchi chiqadi.{' '}
+          {Object.entries(rules.scoreResets)
+            .map(([from, to]) => `Aynan ${from} → ${to}.`)
+            .join(' ')}
         </p>
       </Panel>
       {rules.unconfirmed.length > 0 && (

@@ -28,6 +28,7 @@ function scoreCard(state: RoundState, card: Card): number {
   const effect = effectFor(state.rules, card);
   let score = cardPoints(state.rules, card);
   if (effect.nextDraws) score += 15 + effect.nextDraws * 3;
+  if (effect.mustCover) score += 3;
   if (effect.skipNext) score += 10;
   // Keep wild cards for when nothing else fits.
   if (effect.wild) score -= 40;
@@ -36,6 +37,7 @@ function scoreCard(state: RoundState, card: Card): number {
     const canFollow = self.hand.some((c) => c.id !== card.id && (c.suit === card.suit || c.rank === card.rank));
     score += canFollow ? 5 : -60;
   }
+  if (effect.reverse) score += 2;
   return score;
 }
 

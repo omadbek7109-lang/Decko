@@ -72,11 +72,9 @@ function scoreRound(match: MatchState): MatchState {
     if (!seat || p.eliminated) return p;
     const delta = p.id === winnerId ? finishBonus(rules, finishingCard) : handPoints(rules, seat.hand);
     let total = p.score + delta;
-    let reset = false;
-    if (rules.resetScoreAt !== null && total === rules.resetScoreAt) {
-      total = 0;
-      reset = true;
-    }
+    const replacement = rules.scoreResets[total];
+    const reset = replacement !== undefined;
+    if (replacement !== undefined) total = replacement;
     const eliminated = total > rules.eliminationScore;
     lines.push({ playerId: p.id, delta, total, reset, eliminated });
     return { ...p, score: total, eliminated };

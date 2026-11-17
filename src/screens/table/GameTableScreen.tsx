@@ -59,7 +59,8 @@ export function GameTableScreen() {
   if (!live) status = t.game.roundOver;
   else if (!myTurn) status = t.game.waiting(turnPlayer.name);
   else if (round.phase === 'choosingSuit') status = t.game.chooseSuit;
-  else if (round.mustCover) status = t.game.coverSix;
+  else if (round.pending) status = t.game.penalty(round.pending.draws);
+  else if (round.mustCover) status = t.game.coverAgain;
   else status = t.game.yourTurn;
 
   const showPass = myTurn && canPass(round, humanId);
@@ -180,7 +181,7 @@ export function GameTableScreen() {
               className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[#14384a] px-4 text-[15px] font-bold text-white transition-colors hover:bg-[#1b475d] disabled:bg-paper-ink/15 disabled:text-paper-ink/45"
             >
               <IconDraw size={18} />
-              {t.game.draw}
+              {myTurn && round.pending ? t.game.takePenalty(round.pending.draws) : t.game.draw}
             </button>
           )}
         </div>

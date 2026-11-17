@@ -70,16 +70,18 @@ describe('scoring', () => {
     assert.equal(done.players[1]?.eliminated, true);
   });
 
-  it('exactly 101 is not eliminated', () => {
+  it('exactly 101 resets to 0 and exactly 100 drops to 50', () => {
     const seats = [
       { id: 'p0', name: 'A', isBot: false },
       { id: 'p1', name: 'B', isBot: true },
+      { id: 'p2', name: 'C', isBot: true },
     ];
     let match = startMatch(seats, BASIC_RULES, 1);
-    match = { ...match, players: match.players.map((p) => (p.id === 'p1' ? { ...p, score: 90 } : p)) };
-    const round = table({ rules: BASIC_RULES, hands: [['9-clubs'], ['A-clubs']], top: '9-hearts' });
+    match = { ...match, players: match.players.map((p) => (p.id === 'p1' ? { ...p, score: 90 } : p.id === 'p2' ? { ...p, score: 89 } : p)) };
+    const round = table({ rules: BASIC_RULES, hands: [['9-clubs'], ['A-clubs'], ['A-hearts']], top: '9-hearts' });
     const done = updateRound({ ...match, round }, playCard(round, 'p0', '9-clubs'));
-    assert.equal(done.players[1]?.score, 101);
+    assert.equal(done.players[1]?.score, 0);
+    assert.equal(done.players[2]?.score, 50);
     assert.equal(done.players[1]?.eliminated, false);
     assert.equal(done.phase, 'roundSummary');
   });

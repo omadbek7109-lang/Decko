@@ -72,10 +72,39 @@ describe('valid moves', () => {
   });
 });
 
-describe('classic 101 card effects (configurable)', () => {
-  it('7: next player draws 2 and is skipped', () => {
-    const s = playCard(table({ hands: [['7-hearts', '10-clubs'], ['6-clubs']], top: '9-hearts' }), 'p0', '7-hearts');
-    assert.equal(s.players[1]?.hand.length, 3);
+describe('classic 101 card effects', () => {
+  it('7: next player must take 2 and is skipped, or pass it on with a 7', () => {
+    let s = playCard(table({ hands: [['7-hearts', '10-clubs'], ['6-clubs', 'J-spades']], top: '9-hearts' }), 'p0', '7-hearts');
+    assert.deepEqual(s.pending, { draws: 2, rank: '7', skip: true });
+    assert.equal(currentPlayer(s).id, 'p1');
+    assert.deepEqual(ids(legalCards(s)), []);
+    assert.equal(canPass(s, 'p1'), false);
+    s = drawCard(s, 'p1'); // takes the penalty
+    assert.equal(s.players[1]?.hand.length, 4);
+    assert.equal(s.pending, null);
+    assert.equal(currentPlayer(s).id, 'p0');
+  });
+
+  it('7 on 7 passes the accumulated penalty to the next player', () => {
+    let s = playCard(
+      table({ hands: [['7-hearts', '10-clubs'], ['7-spades', 'J-spades'], ['6-diamonds', 'K-clubs']], top: '9-hearts' }),
+      'p0',
+      '7-hearts',
+    );
+    assert.deepEqual(ids(legalCards(s)), ['7-spades']);
+    s = playCard(s, 'p1', '7-spades');
+    assert.deepEqual(s.pending, { draws: 4, rank: '7', skip: true });
+    assert.equal(currentPlayer(s).id, 'p2');
+    s = drawCard(s, 'p2');
+    assert.equal(s.players[2]?.hand.length, 6);
+    assert.equal(currentPlayer(s).id, 'p0');
+  });
+
+  it('6: next player takes 1 and is skipped; a 6 passes it on', () => {
+    let s = playCard(table({ hands: [['6-hearts', '10-clubs'], ['6-clubs', 'J-spades']], top: '9-hearts' }), 'p0', '6-hearts');
+    assert.deepEqual(s.pending, { draws: 1, rank: '6', skip: true });
+    s = playCard(s, 'p1', '6-clubs');
+    assert.deepEqual(s.pending, { draws: 2, rank: '6', skip: true });
     assert.equal(currentPlayer(s).id, 'p0');
   });
 
@@ -93,8 +122,8 @@ describe('classic 101 card effects (configurable)', () => {
     assert.equal(currentPlayer(s).id, 'p2');
   });
 
-  it('8: reverses direction', () => {
-    const s = playCard(table({ hands: [['8-hearts', '10-clubs'], ['6-clubs'], ['6-spades']], top: '9-hearts' }), 'p0', '8-hearts');
+  it('10: reverses direction', () => {
+    const s = playCard(table({ hands: [['10-hearts', 'J-clubs'], ['6-clubs'], ['6-spades']], top: '9-hearts' }), 'p0', '10-hearts');
     assert.equal(s.direction, -1);
     assert.equal(currentPlayer(s).id, 'p2');
   });
@@ -109,22 +138,29 @@ describe('classic 101 card effects (configurable)', () => {
     assert.deepEqual(ids(legalCards(s)).sort(), ['6-diamonds', 'Q-hearts'].sort());
   });
 
-  it('6: the player must cover it, drawing until they can', () => {
+  it('8: the player plays again, drawing until they can cover it', () => {
     let s = playCard(
-      table({ hands: [['6-hearts', '10-clubs'], ['6-clubs']], top: '9-hearts', pile: ['J-spades', 'K-hearts'] }),
+      table({ hands: [['8-hearts', '10-clubs'], ['6-clubs']], top: '9-hearts', pile: ['J-spades', 'K-hearts'] }),
       'p0',
-      '6-hearts',
+      '8-hearts',
     );
     assert.equal(s.mustCover, true);
     assert.equal(currentPlayer(s).id, 'p0');
     assert.equal(canPass(s, 'p0'), false);
-    s = drawCard(s, 'p0'); // J♠ — cannot cover a heart 6
+    s = drawCard(s, 'p0'); // J♠ — cannot cover a heart 8
     assert.equal(canDraw(s, 'p0'), true);
     s = drawCard(s, 'p0'); // K♥ — covers
     assert.deepEqual(ids(legalCards(s)), ['K-hearts']);
     s = playCard(s, 'p0', 'K-hearts');
     assert.equal(s.mustCover, false);
     assert.equal(currentPlayer(s).id, 'p1');
+  });
+
+  it('a round cannot be finished with an 8', () => {
+    const s = playCard(table({ hands: [['8-hearts'], ['6-clubs']], top: '9-hearts' }), 'p0', '8-hearts');
+    assert.equal(s.phase, 'playing');
+    assert.equal(s.mustCover, true);
+    assert.equal(currentPlayer(s).id, 'p0');
   });
 });
 
@@ -170,5 +206,11 @@ describe('round completion', () => {
     const s = playCard(table({ hands: [['7-hearts'], ['6-clubs']], top: '9-hearts' }), 'p0', '7-hearts');
     assert.equal(s.phase, 'roundOver');
     assert.equal(s.players[1]?.hand.length, 3);
+  });
+
+  it('after drawing an unplayable card the turn passes automatically', () => {
+    const s = drawCard(table({ hands: [['10-spades'], ['6-clubs']], top: '9-hearts', pile: ['J-clubs'] }), 'p0');
+    assert.equal(currentPlayer(s).id, 'p1');
+    assert.equal(s.players[0]?.hand.length, 2);
   });
 });

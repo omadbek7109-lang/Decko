@@ -86,7 +86,9 @@ export const t = {
     waiting: (name: string) => `${name} yurmoqda…`,
     draw: 'Karta olish',
     pass: 'O‘tkazish',
-    coverSix: '6 ni yoping yoki karta oling',
+    coverAgain: 'Yana yuring yoki karta oling',
+    penalty: (n: number) => `Sizga +${n} karta`,
+    takePenalty: (n: number) => `${n} ta olish`,
     chooseSuit: 'Mastni tanlang',
     cards: (n: number) => `${n} karta`,
     leaveTitle: 'O‘yindan chiqasizmi?',
@@ -177,9 +179,9 @@ export const t = {
     basicsText: [
       'Har bir o‘yinchiga 5 ta karta tarqatiladi, bitta karta ochib qo‘yiladi.',
       'Navbatingizda ochiq kartaga mast yoki qiymat bo‘yicha mos karta tashlaysiz.',
-      'Mos karta bo‘lmasa, kolodadan karta olasiz. Olingan karta mos kelsa, tashlash mumkin, aks holda yurishni o‘tkazasiz.',
+      'Mos karta bo‘lmasa, kolodadan 1 ta karta olasiz. Olingan karta mos kelsa, tashlash mumkin, aks holda navbat o‘tadi.',
       'Kartalarini birinchi tugatgan o‘yinchi raundda g‘olib bo‘ladi. Qolganlarning qo‘lidagi kartalar ochkosi qo‘shiladi.',
-      'Ochkosi 101 dan oshgan o‘yinchi o‘yindan chiqadi. Oxirgi qolgan o‘yinchi g‘olib.',
+      'Ochko aynan 100 bo‘lsa 50 ga, aynan 101 bo‘lsa 0 ga tushadi. 101 dan oshgan o‘yinchi chiqadi, oxirgi qolgan o‘yinchi g‘olib.',
     ],
     effects: 'Maxsus kartalar',
     points: 'Karta ochkolari',
@@ -195,6 +197,7 @@ export function effectText(effect: {
   wild?: boolean;
   chooseSuit?: boolean;
   mustCover?: boolean;
+  stackable?: boolean;
 }): string {
   const parts: string[] = [];
   if (effect.wild) parts.push('istalgan kartaga tashlanadi');
@@ -202,7 +205,8 @@ export function effectText(effect: {
   if (effect.nextDraws) parts.push(`keyingi o‘yinchi ${effect.nextDraws} ta oladi`);
   if (effect.skipNext) parts.push('keyingi o‘yinchi yurishni o‘tkazib yuboradi');
   if (effect.reverse) parts.push('yo‘nalish o‘zgaradi');
-  if (effect.mustCover) parts.push('tashlagan o‘yinchi uni yopishi kerak');
+  if (effect.stackable) parts.push('xuddi shu qiymatdagi karta bilan keyingisiga o‘tkazish mumkin');
+  if (effect.mustCover) parts.push('tashlagan o‘yinchi yana yuradi, yopolmasa karta oladi');
   return parts.join(', ');
 }
 
@@ -221,7 +225,9 @@ export function eventText(event: GameEvent, nameOf: (id: string) => string): str
     case 'suitChosen':
       return `Mast: ${SUIT_NAME[event.suit]} ${SUIT_SYMBOL[event.suit]}`;
     case 'mustCover':
-      return `${nameOf(event.playerId)} 6 ni yopishi kerak`;
+      return `${nameOf(event.playerId)} yana yuradi`;
+    case 'passOn':
+      return `${nameOf(event.playerId)}ga +${event.draws}`;
     case 'pass':
       return `${nameOf(event.playerId)} yurishni o‘tkazdi`;
     case 'reshuffle':
