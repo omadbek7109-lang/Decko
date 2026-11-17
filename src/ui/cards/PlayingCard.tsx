@@ -18,14 +18,16 @@ interface PlayingCardProps {
   disabled?: boolean;
   dimmed?: boolean;
   label?: string;
+  /** Penalty points shown next to the corner index. */
+  points?: number;
 }
 
-const SHADOW = 'shadow-[0_2px_6px_rgba(0,0,0,0.28)]';
+const SHADOW = 'shadow-[0_3px_8px_rgba(0,0,0,0.35)]';
 
 export function PlayingCard({
   card,
   faceDown = false,
-  back = 'burgundy',
+  back = 'classic',
   width,
   className = '',
   style,
@@ -33,10 +35,11 @@ export function PlayingCard({
   disabled,
   dimmed,
   label,
+  points,
 }: PlayingCardProps) {
   const size: CSSProperties = { width, height: Math.round(width * CARD_RATIO), ...style };
-  const art = faceDown || !card ? <CardBack variant={back} /> : <CardFace card={card} />;
-  const tone = dimmed ? 'brightness-[0.72] saturate-[0.7]' : '';
+  const art = faceDown || !card ? <CardBack variant={back} /> : <CardFace card={card} points={points} />;
+  const tone = dimmed ? 'brightness-[0.8] saturate-[0.75]' : '';
 
   if (onClick) {
     return (
@@ -45,7 +48,7 @@ export function PlayingCard({
         onClick={onClick}
         aria-disabled={disabled || undefined}
         aria-label={label ?? (card ? cardName(card) : 'Karta')}
-        className={`shrink-0 rounded-[7%/5%] ${SHADOW} ${tone} transition-transform duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F3E7C7] ${className}`}
+        className={`shrink-0 rounded-[6.5%/4.6%] ${SHADOW} ${tone} transition-transform duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F3E7C7] ${className}`}
         style={size}
       >
         {art}
@@ -57,7 +60,7 @@ export function PlayingCard({
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      className={`shrink-0 rounded-[7%/5%] ${SHADOW} ${tone} ${className}`}
+      className={`shrink-0 rounded-[6.5%/4.6%] ${SHADOW} ${tone} ${className}`}
       style={size}
     >
       {art}

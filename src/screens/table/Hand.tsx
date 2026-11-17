@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { type Card, type CardId, RANKS, SUITS } from '../../engine';
+import { type Card, type CardId, RANKS, type RuleSet, SUITS, cardPoints } from '../../engine';
 import { cardName } from '../../i18n/uz';
 import { PlayingCard } from '../../ui/cards/PlayingCard';
 
@@ -17,33 +17,42 @@ interface HandProps {
   playable: ReadonlySet<CardId>;
   myTurn: boolean;
   width: number;
+  /** Visible height; the lower part of the cards tucks under the player panel. */
+  height: number;
+  rules: RuleSet;
   onPlay: (id: CardId) => void;
 }
 
-/** The player's fanned hand. Cards that can be played now are raised; others are dimmed. */
-export function Hand({ cards, playable, myTurn, width, onPlay }: HandProps) {
+/** The player's fanned hand. Playable cards rise; the rest are dimmed on your turn. */
+export function Hand({ cards, playable, myTurn, width, height, rules, onPlay }: HandProps) {
   const sorted = useMemo(() => sortHand(cards), [cards]);
   const n = sorted.length;
-  const cardW = Math.round(Math.max(62, Math.min(88, width * 0.21)));
-  const cardH = Math.round(cardW * 1.4);
-  const step = n > 1 ? Math.min(cardW * 0.7, (width - cardW) / (n - 1)) : 0;
+  const cardW = Math.round(Math.max(84, Math.min(132, width * 0.31, (height - 20) / 1.05)));
+  const step = n > 1 ? Math.min(cardW * 0.62, (width - 48 - cardW) / (n - 1)) : 0;
   const total = cardW + step * Math.max(0, n - 1);
-  const spread = Math.min(3.5, 22 / Math.max(1, n));
+  const spread = Math.min(3, 16 / Math.max(1, n));
+  const boxW = Math.min(width, total + 24);
+  const offset = (boxW - total) / 2;
 
   return (
-    <div className="relative mx-auto" style={{ width: total, height: cardH + 26 }} role="group" aria-label="Qo‘lingizdagi kartalar">
+    <div className="relative mx-auto" style={{ width: boxW, height, clipPath: 'inset(-60px -60px 0 -60px)' }} role="group" aria-label="Qo‘lingizdagi kartalar">
       {sorted.map((card, i) => {
-        const t = i - (n - 1) / 2;
+        const tt = i - (n - 1) / 2;
         const canPlay = myTurn && playable.has(card.id);
-        const lift = canPlay ? 16 : 0;
-        const y = 12 + t * t * 0.9 - lift;
+        const lift = canPlay ? 18 : 0;
         return (
           <PlayingCard
             key={card.id}
             card={card}
             width={cardW}
-            className="absolute"
-            style={{ left: i * step, top: y, transform: `rotate(${t * spread}deg)`, transformOrigin: '50% 130%' }}
+            points={cardPoints(rules, card)}
+            className="animate-deal absolute transition-[top,transform] duration-200"
+            style={{
+              left: offset + i * step,
+              top: 22 + Math.abs(tt) * Math.abs(tt) * 1.1 - lift,
+              transform: `rotate(${tt * spread}deg)`,
+              transformOrigin: '50% 110%',
+            }}
             dimmed={myTurn && !canPlay}
             disabled={!canPlay}
             label={`${cardName(card)}${canPlay ? '' : ' (hozir tashlab bo‘lmaydi)'}`}

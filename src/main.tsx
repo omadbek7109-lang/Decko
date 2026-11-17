@@ -6,7 +6,7 @@ import { initTelegramShell } from './services/local/telegram';
 import { initSession } from './state/session';
 import './index.css';
 
-initTelegramShell('#0d3436');
+initTelegramShell('#123241');
 void initSession();
 
 const root = document.getElementById('root');

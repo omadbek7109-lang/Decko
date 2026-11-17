@@ -1,20 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  type CardId,
-  canDraw,
-  canPass,
-  currentPlayer,
-  legalCards,
-  topCard,
-} from '../../engine';
+import { type CardId, canDraw, canPass, cardPoints, currentPlayer, legalCards, topCard } from '../../engine';
 import { eventText, t } from '../../i18n/uz';
 import { ROUTES, navigate } from '../../lib/router';
 import { useStore } from '../../lib/store';
 import { hapticTap } from '../../services/local/telegram';
 import { abandonMatch, gameStore, humanActions, nextRound, sayPhrase, startPracticeMatch } from '../../state/game';
 import { sessionStore } from '../../state/session';
-import { Button, IconButton } from '../../ui/components/Button';
-import { Avatar } from '../../ui/components/Layout';
+import { IconButton } from '../../ui/components/Button';
+import { AvatarTile } from '../../ui/components/Layout';
 import { IconBack, IconBook, IconChat, IconDraw, IconSkip } from '../../ui/components/icons';
 import { useViewport } from '../../ui/hooks';
 import { CenterPile } from './CenterPile';
@@ -28,6 +21,7 @@ export function GameTableScreen() {
   const notice = useStore(gameStore, (s) => s.notice);
   const bubble = useStore(gameStore, (s) => s.bubble);
   const settings = useStore(sessionStore, (s) => s.settings);
+  const user = useStore(sessionStore, (s) => s.user);
   const { width, height } = useViewport();
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -51,16 +45,19 @@ export function GameTableScreen() {
   const scoreOf = (id: string) => match.players.find((p) => p.id === id)?.score ?? 0;
   const nameOf = (id: string) => match.players.find((p) => p.id === id)?.name ?? '';
   const turnPlayer = currentPlayer(round);
-  const myTurn = round.phase !== 'roundOver' && turnPlayer.id === humanId;
+  const live = round.phase !== 'roundOver';
+  const myTurn = live && turnPlayer.id === humanId;
   const top = topCard(round);
-  const under = round.discardPile.length > 1 ? (round.discardPile[round.discardPile.length - 2] ?? null) : null;
-  const limit = match.rules.eliminationScore;
-  const compactHeight = height < 680;
-  const pileWidth = Math.round(Math.max(60, Math.min(compactHeight ? 70 : 86, width * 0.21)));
+  const under = round.discardPile.slice(-3, -1);
+  const short = height < 700;
+  const sides = opponents.length === 3;
+  const pileWidth = Math.round(Math.max(72, Math.min(short ? 88 : 112, width * 0.27, height * (sides ? 0.11 : 0.13))));
+  const deckWidth = Math.round(pileWidth * 0.78);
+  const handHeight = Math.round(Math.max(128, Math.min(196, height * 0.23)));
 
   const events = round.events.map((e) => eventText(e, nameOf)).filter((x): x is string => Boolean(x));
   let status: string;
-  if (round.phase === 'roundOver') status = t.game.roundOver;
+  if (!live) status = t.game.roundOver;
   else if (!myTurn) status = t.game.waiting(turnPlayer.name);
   else if (round.phase === 'choosingSuit') status = t.game.chooseSuit;
   else if (round.mustCover && playable.size === 0) status = t.game.cover;
@@ -75,10 +72,18 @@ export function GameTableScreen() {
     fn();
   }
 
-  // 3 opponents: left / top / right. 1–2 opponents sit in the top row.
-  const sideLeft = opponents.length === 3 ? opponents[0] : undefined;
-  const sideRight = opponents.length === 3 ? opponents[2] : undefined;
-  const topRow = opponents.length === 3 ? [opponents[1]] : opponents;
+  const seat = (p: (typeof opponents)[number], compact: boolean) => (
+    <Seat
+      name={p.name}
+      cardCount={p.hand.length}
+      score={scoreOf(p.id)}
+      active={live && turnPlayer.id === p.id}
+      back={settings.cardBack}
+      compact={compact}
+    />
+  );
+  // 3 opponents sit in the top row (left and right a little lower); 1–2 sit side by side.
+  const topRow = opponents;
 
   return (
     <div className="mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden">
@@ -86,11 +91,11 @@ export function GameTableScreen() {
         <IconButton label={t.back} onClick={() => setLeaveOpen(true)}>
           <IconBack />
         </IconButton>
-        <div className="min-w-0 flex-1 text-center">
-          <div className="truncate text-[15px] font-semibold">
-            {t.game.practice} · {match.rules.name}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[16px] font-bold leading-tight">{match.rules.name}</div>
+          <div className="text-[12px] text-muted">
+            {t.game.practice} · {t.game.round(match.roundNumber)}
           </div>
-          <div className="text-[12px] text-muted">{t.game.round(match.roundNumber)}</div>
         </div>
         <IconButton label={t.lobby.rules} onClick={() => navigate(ROUTES.rules)}>
           <IconBook />
@@ -100,38 +105,15 @@ export function GameTableScreen() {
         </IconButton>
       </header>
 
-      <section className={`flex justify-around px-3 ${compactHeight ? 'pt-1' : 'pt-3'}`} aria-label="Raqiblar">
-        {topRow.map(
-          (p) =>
-            p && (
-              <Seat
-                key={p.id}
-                name={p.name}
-                cardCount={p.hand.length}
-                score={scoreOf(p.id)}
-                limit={limit}
-                active={turnPlayer.id === p.id && round.phase !== 'roundOver'}
-                back={settings.cardBack}
-                compact={opponents.length > 1}
-              />
-            ),
-        )}
+      <section className={`flex items-start justify-around px-1 ${short ? 'pt-0' : 'pt-2'}`} aria-label="Raqiblar">
+        {topRow.map((p, i) => (
+          <div key={p.id} className={sides && i !== 1 ? 'mt-10' : ''}>
+            {seat(p, opponents.length > 1)}
+          </div>
+        ))}
       </section>
 
       <section className="relative flex min-h-0 flex-1 items-center justify-center" aria-label="Stol">
-        {sideLeft && (
-          <div className="absolute left-2 top-1/2 -translate-y-1/2">
-            <Seat
-              name={sideLeft.name}
-              cardCount={sideLeft.hand.length}
-              score={scoreOf(sideLeft.id)}
-              limit={limit}
-              active={turnPlayer.id === sideLeft.id}
-              back={settings.cardBack}
-              compact
-            />
-          </div>
-        )}
         <CenterPile
           top={top}
           under={under}
@@ -139,59 +121,72 @@ export function GameTableScreen() {
           requiredSuit={round.requiredSuit}
           direction={round.direction}
           back={settings.cardBack}
-          cardWidth={sideLeft ? Math.min(pileWidth, 66) : pileWidth}
+          deckWidth={deckWidth}
+          pileWidth={pileWidth}
+          topPoints={cardPoints(match.rules, top)}
         />
-        {sideRight && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2">
-            <Seat
-              name={sideRight.name}
-              cardCount={sideRight.hand.length}
-              score={scoreOf(sideRight.id)}
-              limit={limit}
-              active={turnPlayer.id === sideRight.id}
-              back={settings.cardBack}
-              compact
-            />
-          </div>
+      </section>
+
+      <div className="flex min-h-[46px] flex-col items-center justify-end gap-0.5 px-4 text-center" aria-live="polite">
+        <p
+          className={`rounded-full px-4 py-1 text-[14px] font-semibold ${notice ? 'bg-danger/20 text-danger' : myTurn ? 'bg-accent/15 text-accent' : 'bg-black/20 text-ink'}`}
+        >
+          {notice ?? status}
+        </p>
+        {events.length > 0 && <p className="max-w-full truncate text-[12px] text-muted">{events.slice(-2).join(' · ')}</p>}
+      </div>
+
+      <section aria-label="Sizning kartalaringiz" className="relative z-0">
+        {me && (
+          <Hand
+            cards={me.hand}
+            playable={playable}
+            myTurn={myTurn && round.phase === 'playing'}
+            width={width - 16}
+            height={handHeight}
+            rules={match.rules}
+            onPlay={(id) => act(() => humanActions.play(id))}
+          />
         )}
       </section>
 
-      <div className="flex min-h-[44px] flex-col items-center justify-center px-4 text-center" aria-live="polite">
-        <p className={`text-[14px] font-semibold ${myTurn ? 'text-accent' : 'text-ink'}`}>{notice ?? status}</p>
-        {events.length > 0 && <p className="truncate text-[12px] text-muted">{events.slice(-2).join(' · ')}</p>}
-      </div>
-
-      <section className="px-3" aria-label="Sizning kartalaringiz">
-        {me && <Hand cards={me.hand} playable={playable} myTurn={myTurn && round.phase === 'playing'} width={width - 24} onPlay={(id) => act(() => humanActions.play(id))} />}
-      </section>
-
-      <footer className="relative mx-3 mb-[max(10px,env(safe-area-inset-bottom))] mt-1 flex items-center gap-3 rounded-2xl border border-line bg-felt-deep/80 p-2.5">
+      <footer className="relative z-10 -mt-2 rounded-t-[26px] bg-paper px-4 pb-[max(14px,env(safe-area-inset-bottom))] pt-3 text-paper-ink shadow-[0_-6px_18px_rgba(0,0,0,0.3)]">
         {bubble && (
-          <div role="status" className="absolute -top-11 left-3 rounded-xl bg-paper px-3 py-2 text-[13px] font-semibold text-paper-ink shadow">
+          <div role="status" className="absolute -top-12 left-4 rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-[13px] font-semibold text-paper-ink shadow-lg">
             {bubble}
           </div>
         )}
-        <Avatar name={meMatch?.name ?? t.game.you} size={42} ring={myTurn} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[14px] font-semibold">{meMatch?.name ?? t.game.you}</div>
-          <div className="mt-1 flex items-center gap-2">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10" aria-hidden="true">
-              <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, Math.max(0, ((meMatch?.score ?? 0) / limit) * 100))}%` }} />
-            </div>
-            <span className="text-[12px] tabular-nums text-muted">
-              {meMatch?.score ?? 0}/{limit}
-            </span>
+        <div className="flex items-center gap-3">
+          <AvatarTile name={meMatch?.name ?? t.game.you} photoUrl={user?.photoUrl} size={54} active={myTurn} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-bold">{meMatch?.name ?? t.game.you}</div>
+            <div className="text-[12px] text-paper-ink/60">{t.game.cards(me?.hand.length ?? 0)}</div>
           </div>
+          <div className="flex flex-col items-center border-l border-paper-ink/10 pl-3 pr-1">
+            <span className="text-[26px] font-bold tabular-nums leading-none">{meMatch?.score ?? 0}</span>
+            <span className="text-[11px] text-paper-ink/60">/ {match.rules.eliminationScore}</span>
+          </div>
+          {showPass ? (
+            <button
+              type="button"
+              onClick={() => act(humanActions.pass)}
+              className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[#14384a] px-4 text-[15px] font-bold text-white transition-colors hover:bg-[#1b475d]"
+            >
+              <IconSkip size={18} />
+              {t.game.pass}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => act(humanActions.draw)}
+              disabled={!drawEnabled}
+              className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[#14384a] px-4 text-[15px] font-bold text-white transition-colors hover:bg-[#1b475d] disabled:bg-paper-ink/15 disabled:text-paper-ink/45"
+            >
+              <IconDraw size={18} />
+              {t.game.draw}
+            </button>
+          )}
         </div>
-        {showPass ? (
-          <Button className="min-w-[132px]" icon={<IconSkip size={18} />} onClick={() => act(humanActions.pass)}>
-            {t.game.pass}
-          </Button>
-        ) : (
-          <Button className="min-w-[132px]" icon={<IconDraw size={18} />} disabled={!drawEnabled} onClick={() => act(humanActions.draw)}>
-            {t.game.draw}
-          </Button>
-        )}
       </footer>
 
       <SuitPicker open={myTurn && round.phase === 'choosingSuit'} onPick={(s) => act(() => humanActions.chooseSuit(s))} />

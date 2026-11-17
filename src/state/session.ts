@@ -2,7 +2,7 @@ import { createStore } from '../lib/store';
 import { KEYS, readJson, writeJson } from '../services/local/storage';
 import { type AuthUser, services } from '../services';
 
-export type CardBackId = 'burgundy' | 'teal' | 'navy';
+export type CardBackId = 'classic' | 'burgundy' | 'navy';
 export type BotSpeed = 'slow' | 'normal' | 'fast';
 
 export interface Settings {
@@ -14,7 +14,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  cardBack: 'burgundy',
+  cardBack: 'classic',
   rulesId: 'classic101',
   botSpeed: 'normal',
   haptics: true,
@@ -32,8 +32,14 @@ interface SessionState {
 export const sessionStore = createStore<SessionState>({
   ready: false,
   user: null,
-  settings: { ...DEFAULT_SETTINGS, ...readJson<Partial<Settings>>(KEYS.settings, {}) },
+  settings: loadSettings(),
 });
+
+function loadSettings(): Settings {
+  const stored = { ...DEFAULT_SETTINGS, ...readJson<Partial<Settings>>(KEYS.settings, {}) };
+  if (!['classic', 'burgundy', 'navy'].includes(stored.cardBack)) stored.cardBack = DEFAULT_SETTINGS.cardBack;
+  return stored;
+}
 
 export async function initSession(): Promise<void> {
   let user = await services.auth.getCurrentUser();

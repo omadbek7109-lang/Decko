@@ -1,56 +1,60 @@
+import { t } from '../../i18n/uz';
 import type { CardBackId } from '../../state/session';
 import { PlayingCard } from '../../ui/cards/PlayingCard';
-import { Avatar } from '../../ui/components/Layout';
-import { t } from '../../i18n/uz';
+import { AvatarTile } from '../../ui/components/Layout';
 
 interface SeatProps {
   name: string;
   cardCount: number;
   score: number;
-  limit: number;
   active: boolean;
   back: CardBackId;
+  /** Smaller seat for 3–4 player tables. */
   compact?: boolean;
 }
 
-/** An opponent: avatar, name, score and a small fan of face-down cards. */
-export function Seat({ name, cardCount, score, limit, active, back, compact = false }: SeatProps) {
-  const shown = Math.min(cardCount, compact ? 4 : 7);
-  const w = compact ? 26 : 34;
-  const step = compact ? 9 : 13;
+/** An opponent: a fan of face-down cards behind a square player tile. */
+export function Seat({ name, cardCount, score, active, back, compact = false }: SeatProps) {
+  const shown = Math.min(cardCount, compact ? 6 : 9);
+  const cardW = compact ? 34 : 48;
+  const tile = compact ? 52 : 70;
+  const spread = shown > 1 ? Math.min(compact ? 11 : 13, (compact ? 60 : 84) / (shown - 1)) : 0;
+  const width = compact ? 110 : 190;
+  const height = compact ? 100 : 128;
+
   return (
     <div
-      className="flex flex-col items-center gap-1.5"
-      aria-label={`${name}: ${t.game.cards(cardCount)}, ${t.game.points.toLowerCase()} ${score}`}
+      className="relative"
+      style={{ width, height }}
+      role="group"
+      aria-label={`${name}: ${t.game.cards(cardCount)}, ${t.game.points.toLowerCase()} ${score}${active ? `, ${t.game.waiting(name)}` : ''}`}
     >
-      <div className="relative" style={{ height: Math.round(w * 1.4) + 6, width: w + step * Math.max(0, shown - 1) }} aria-hidden="true">
+      <div aria-hidden="true">
         {Array.from({ length: shown }, (_, i) => {
-          const tilt = (i - (shown - 1) / 2) * (compact ? 5 : 6);
+          const angle = (i - (shown - 1) / 2) * spread;
           return (
             <PlayingCard
               key={i}
               faceDown
               back={back}
-              width={w}
-              className="absolute top-0"
-              style={{ left: i * step, transform: `rotate(${tilt}deg)`, transformOrigin: '50% 120%' }}
+              width={cardW}
+              className="absolute"
+              style={{
+                left: width / 2 - cardW / 2,
+                top: compact ? 14 : 20,
+                transform: `rotate(${angle}deg)`,
+                transformOrigin: '50% 160%',
+              }}
             />
           );
         })}
-        <span className="absolute -right-2 -top-1 flex min-w-6 items-center justify-center rounded-full bg-paper px-1.5 text-[12px] font-bold leading-6 text-paper-ink">
-          {cardCount}
-        </span>
       </div>
-      <div className={`flex items-center gap-2 rounded-full border bg-felt-deep/80 py-1 pl-1 pr-3 ${active ? 'border-accent' : 'border-line'}`}>
-        <Avatar name={name} size={compact ? 26 : 30} />
-        <div className="flex flex-col leading-tight">
-          <span className="max-w-[86px] truncate text-[13px] font-semibold">{name}</span>
-          <span className="text-[11px] text-muted">
-            {score}/{limit}
-          </span>
-        </div>
+      <div className="absolute left-1/2 -translate-x-1/2" style={{ top: compact ? 6 : 4 }}>
+        <AvatarTile name={name} size={tile} badge={score} label={name} active={active} />
       </div>
-      {active && <span className="sr-only">{t.game.waiting(name)}</span>}
+      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium text-muted" aria-hidden="true">
+        {t.game.cards(cardCount)}
+      </span>
     </div>
   );
 }

@@ -17,36 +17,41 @@ const PIPS: Partial<Record<Rank, [number, number][]>> = {
 
 export const CARD_RATIO = 1.4;
 
-function Corner({ card, color }: { card: Card; color: string }) {
+function Corner({ card, color, points }: { card: Card; color: string; points?: number }) {
   const ten = card.rank === '10';
   return (
     <g>
       <text
-        x={21}
-        y={42}
+        x={ten ? 24 : 22}
+        y={44}
         textAnchor="middle"
         fontFamily="'Libre Baskerville', Georgia, 'Times New Roman', serif"
         fontWeight={700}
-        fontSize={ten ? 27 : 33}
-        letterSpacing={ten ? -2.5 : 0}
+        fontSize={ten ? 31 : 38}
+        letterSpacing={ten ? -3 : 0}
         fill={color}
       >
         {card.rank}
       </text>
-      {(card.rank === '6' || card.rank === '9') && <path d="M13 47H29" stroke={color} strokeWidth={2.2} strokeLinecap="round" />}
-      <SuitShape suit={card.suit} x={21} y={60} size={20} />
+      {(card.rank === '6' || card.rank === '9') && <path d="M13 50H31" stroke={color} strokeWidth={2.4} strokeLinecap="round" />}
+      {points !== undefined && (
+        <text x={ten ? 46 : 42} y={24} fontFamily="Inter, system-ui, sans-serif" fontWeight={700} fontSize={17} fill="#8E949C">
+          {points}
+        </text>
+      )}
+      <SuitShape suit={card.suit} x={22} y={68} size={22} />
     </g>
   );
 }
 
 /** The full face of a traditional playing card as one scalable SVG. */
-export const CardFace = memo(function CardFace({ card }: { card: Card }) {
+export const CardFace = memo(function CardFace({ card, points }: { card: Card; points?: number }) {
   const color = suitColor(card.suit);
   const pips = PIPS[card.rank];
   return (
     <svg viewBox="0 0 200 280" className="block h-full w-full" aria-hidden="true">
-      <rect x={0.5} y={0.5} width={199} height={279} rx={14} fill="#FDFCF8" stroke="#D9D6CC" />
-      <Corner card={card} color={color} />
+      <rect x={0.5} y={0.5} width={199} height={279} rx={13} fill="#FFFFFF" stroke="#C9CCD1" />
+      <Corner card={card} color={color} points={points} />
       <g transform="rotate(180 100 140)">
         <Corner card={card} color={color} />
       </g>

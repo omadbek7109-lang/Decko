@@ -96,3 +96,51 @@ export function Segmented<T extends string | number>({
     </div>
   );
 }
+
+const TILE_COLORS = ['#5B5FC7', '#2F7D57', '#B5543C', '#3B6FB6', '#8456B5', '#A37B23'];
+
+function tileColor(seed: string): string {
+  let h = 0;
+  for (const ch of seed) h = (h * 33 + ch.charCodeAt(0)) >>> 0;
+  return TILE_COLORS[h % TILE_COLORS.length] as string;
+}
+
+/** Square player tile (game-table style) with an optional corner badge and name label. */
+export function AvatarTile({
+  name,
+  photoUrl,
+  size = 64,
+  badge,
+  label,
+  active = false,
+}: {
+  name: string;
+  photoUrl?: string | null;
+  size?: number;
+  badge?: string | number;
+  label?: string;
+  active?: boolean;
+}) {
+  const initial = name.trim().charAt(0).toUpperCase() || '?';
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <div
+        className={`flex size-full items-center justify-center overflow-hidden rounded-[22%] border-2 font-bold text-white shadow-[0_4px_10px_rgba(0,0,0,0.35)] ${active ? 'animate-turn border-accent' : 'border-white/15'}`}
+        style={{ background: tileColor(name), fontSize: size * 0.48 }}
+        aria-hidden="true"
+      >
+        {photoUrl ? <img src={photoUrl} alt="" className="size-full object-cover" referrerPolicy="no-referrer" /> : initial}
+      </div>
+      {badge !== undefined && (
+        <span className="absolute -right-2 -top-2 min-w-7 rounded-lg border border-white/25 bg-[#0e2a36] px-1.5 text-center text-[13px] font-bold leading-6 text-white">
+          {badge}
+        </span>
+      )}
+      {label && (
+        <span className="absolute -bottom-3 left-1/2 max-w-[104px] -translate-x-1/2 truncate rounded-lg bg-[#0e2a36]/95 px-2.5 text-[13px] font-semibold leading-6 text-white">
+          {label}
+        </span>
+      )}
+    </div>
+  );
+}
